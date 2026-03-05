@@ -15,13 +15,19 @@ _collection = _client.get_or_create_collection(name="rag", metadata={"hnsw:space
 def add(id: str, text: str, metadata: dict | None = None):
     """Store one document chunk: embed and add to Chroma"""
     vector = embed(text)
-    _collection.add(ids=[id], embeddings=[vector], documents=[text], metadatas=[metadata or {}])
+    meta = metadata if metadata else {"_": 0}
+    _collection.add(ids=[id], embeddings=[vector], documents=[text], metadatas=[meta])
 
 
 def add_batch(ids: list[str], texts: list[str], metadatas: list[dict] | None = None):
     """Store multiple chunks: Metadatas can be a list of dicts (one per chunk) or None."""
     vectors = [embed(t) for t in texts]
-    _collection.add(ids=ids, embeddings=vectors, documents=texts, metadatas=metadatas or [{}] * len(texts))
+    _collection.add(
+        ids=ids,
+        embeddings=vectors,
+        documents=texts,
+        metadatas=[m if m else {"_": 0} for m in (metadatas or [{}] * len(texts))],
+    )
 
 
 def search(query: str, top_k: int | None = None) -> list[dict]:
