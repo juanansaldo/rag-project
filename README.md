@@ -44,6 +44,14 @@ A retrieval-augmented generation (RAG) API: ingest documents, then ask questions
    - Health: http://127.0.0.1:8000/health
    - Docs: http://127.0.0.1:8000/docs
 
+5. (Optional) Start the Streamlit UI to upload docs and ask questions in the browser:
+
+   ```bash
+   python -m streamlit run streamlit_app.py
+   ```
+
+   Open http://localhost:8501. Keep the API running in another terminal.
+
 ## API
 
 - **GET /health** — Liveness check; returns `{"status": "ok"}`.
@@ -68,6 +76,7 @@ A retrieval-augmented generation (RAG) API: ingest documents, then ask questions
 - `app/ingest.py` — Ingest pipeline: load → chunk → add to store
 - `vector_store/` — Chroma persistence (created on first use)
 - `data/` — Uploaded documents (optional; add sample files here)
+- `streamlit_app.py` — Streamlit UI: upload documents, ask questions, view answer and sources
 - `tests/` — Pytest tests (chunking, loaders, ingest, store, llm, query)
 
 ## Tests
