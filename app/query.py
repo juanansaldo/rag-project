@@ -6,10 +6,10 @@ SYSTEM_PROMPT = """Answer only using the context below. If the answer is not in 
     "I don't see that in the documents." Do not make up information."""
 
 
-def rag_query(question: str, top_k: int | None = None) -> dict:
+def rag_query(question: str, session_id: str = "default", top_k: int | None = None) -> dict:
     """Run RAG: retrieve chunks, then generate answer. Returns {"answer": str, "sources": list}."""
     k = top_k if top_k is not None else TOP_K
-    hits = search(question, top_k=k)
+    hits = search(question, top_k=k, session_id=session_id)
     if not hits:
         return {"answer": "No relevant documents found. Ingest some documents first.", "sources": []}
     context = "\n\n---\n\n".join(h["document"] for h in hits)
