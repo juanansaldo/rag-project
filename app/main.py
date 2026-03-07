@@ -1,25 +1,62 @@
+import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
+
 from pydantic import BaseModel
 from fastapi import FastAPI, UploadFile, File, Header, HTTPException
 
+from app.config import SESSION_TTL_SECONDS, SESSION_CLEANUP_INTERVAL_SECONDS
 from app.ingest import ingest_file
 from app.query import rag_query
-from app.sessions import touch_session, maybe_get_expired_sessions, remove_session_tracking
+from app.session_db import touch_session, get_expired_sessions, remove_session
 from app.store import delete_session
-
-app = FastAPI(title="RAG API")
-
-
-def _run_ttl_cleanup():
-    expired = maybe_get_expired_sessions()
-    for sid in expired:
-        delete_session(sid)
 
 
 def _require_session_id(x_session_id: str | None) -> str:
     if not x_session_id:
         raise HTTPException(status_code=400, detail="Missing X-Session-ID header")
     return x_session_id
+
+
+def _cleanup_expired_sessions() -> int:
+    """Delete expired sessions from vector store and session DB."""
+    expired = get_expired_sessions(SESSION_TTL_SECONDS)
+    for sid in expired:
+        delete_session(sid)  # Remove chunks from Chroma
+        remove_session(sid)  # Remove tracking row from SQLite
+    return len(expired)
+
+
+async def _cleanup_loop() -> None:
+    while True:
+        try:
+            _cleanup_expired_sessions()
+        except Exception as e:
+            print(f"[cleanup_loop] cleanup failed: {e}")
+        await asyncio.sleep(SESSION_CLEANUP_INTERVAL_SECONDS)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: cleanup once (handles stal sessions after restarts)
+    try:
+        _cleanup_expired_sessions()
+    except Exception as e:
+        print(f"[lifespan] startup cleanup failed: {e}")
+        
+    #Background periodic cleanup
+    task = asyncio.create_task(_cleanup_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(title="RAG API", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -33,7 +70,6 @@ async def ingest_upload(
     x_session_id: str | None = Header(default=None, alias="X-Session-ID"),
 ):
     """Upload a single file (PDF, TXT, MD); chunk and add to vector store."""
-    _run_ttl_cleanup()
     session_id = _require_session_id(x_session_id)
     touch_session(session_id)
 
@@ -59,7 +95,6 @@ class QueryRequest(BaseModel):
 @app.post("/query")
 def query(req: QueryRequest, x_session_id: str | None = Header(default=None, alias="X-Session-ID")):
     """Ask a question; returns answer and source chunks."""
-    _run_ttl_cleanup()
     session_id = _require_session_id(x_session_id)
     touch_session(session_id)
 
@@ -74,5 +109,5 @@ def query(req: QueryRequest, x_session_id: str | None = Header(default=None, ali
 def clear_session(x_session_id: str | None = Header(default=None, alias="X-Session-ID")):
     session_id = _require_session_id(x_session_id)
     removed = delete_session(session_id)
-    remove_session_tracking(session_id)
+    remove_session(session_id)
     return {"ok": True, "deleted_chunks": removed}

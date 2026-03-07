@@ -1,23 +1,31 @@
 from pathlib import Path
-import uuid
+import hashlib
 
 from app.chunking import chunk_text
 from app.loaders import load_document
-from app.store import add_batch
+from app.store import add_batch, delete_session_source
 
 
 def ingest_file(path: str | Path, session_id: str = "default") -> int:
     """Load one file, chunk, add to store. Returns number of chunks added."""
     pages = load_document(path)
+
+    if not pages:
+        return 0
+
+    source_name = pages[0]["source"]
+    delete_session_source(session_id=session_id, source=source_name)
     ids, texts, metadatas = [], [], []
 
     for p in pages:
         source = p["source"]
         page = p["page"]
         for c in chunk_text(p["text"], source=source):
-            chunk_id = f"{session_id}_{source}_{page}_{c['index']}_{uuid.uuid4().hex[:8]}"
+            text = c["text"]
+            fingerprint = hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
+            chunk_id = f"{session_id}:{source}:{page}:{c['index']}:{fingerprint}"
             ids.append(chunk_id)
-            texts.append(c["text"])
+            texts.append(text)
             metadatas.append({"source": source, "page": str(page), "index": str(c["index"])})
     
     if ids:

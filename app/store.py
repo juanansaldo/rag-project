@@ -18,7 +18,7 @@ def add(id: str, text: str, metadata: dict | None = None, session_id: str = "def
     meta["session_id"] = session_id
     if not meta:
         meta = {"_": 0}
-    _collection.add(ids=[id], embeddings=[vector], documents=[text], metadatas=[meta])
+    _collection.upsert(ids=[id], embeddings=[vector], documents=[text], metadatas=[meta])
 
 
 def add_batch(
@@ -38,7 +38,7 @@ def add_batch(
             mm = {"_": 0}
         final_metas.append(mm)
 
-    _collection.add(ids=ids, embeddings=vectors, documents=texts, metadatas=final_metas)
+    _collection.upsert(ids=ids, embeddings=vectors, documents=texts, metadatas=final_metas)
 
 
 def search(query: str, top_k: int | None = None, session_id: str = "default") -> list[dict]:
@@ -72,3 +72,45 @@ def delete_session(session_id: str) -> int:
     if ids:
         _collection.delete(ids=ids)
     return len(ids)
+
+
+def delete_session_source(session_id: str, source: str) -> int:
+    """Delete all chunks for one source file in one session."""
+    if not session_id or not source:
+        return 0
+    
+    # Explicit boolean filter
+    where_filter = {
+        "$and": [
+            {"session_id": {"$eq": session_id}},
+            {"source": {"$eq": source}},
+        ]
+    }
+
+    try:
+        res = _collection.get(where=where_filter)
+        ids = res.get("ids", []) if res else []
+        if ids:
+            _collection.delete(ids=ids)
+        return len(ids)
+    except Exception as e:
+        print(f"[delete_session_source] primary filter failed: {e}; falling back")
+
+    # Fallback: get session rows, then filter by source
+    try:
+        res = _collection.get(where={"session_id": session_id})
+        ids = []
+        if res:
+            all_ids = res.get("ids", []) or []
+            metas = res.get("metadatas", []) or []
+            for i, meta in enumerate(metas):
+                if isinstance(meta, dict) and meta.get("source") == source and i < len(all_ids):
+                    ids.append(all_ids[i])
+
+        if ids:
+            _collection.delete(ids=ids)
+        return len(ids)
+    except Exception as e:
+        raise RuntimeError(
+            f"delete_session_source failed for session_id={session_id}, source={source}: {e}"
+        ) from e
