@@ -1,5 +1,16 @@
-.env
+# Python / tests
 __pycache__/
+.pytest_cache/
+*.ps1
+
+# Local env and state
+.env
+session_state.db
 vector_store/
 data/
-*.ps1
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

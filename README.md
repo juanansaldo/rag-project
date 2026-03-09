@@ -1,6 +1,6 @@
 # RAG Project
 
-A retrieval-augmented generation (RAG) API: ingest documents, then ask questions and get answers grounded in stored content. Uses open-source models via Ollama (embeddings + LLM) and Chroma for the vector store. Data is isolated per session and expires after a configurable TTL.
+A retrieval-augmented generation (RAG) API: ingest documents, then ask questions and get answers grounded in stored content. Uses open-source models via Ollama (embeddings + LLM) and Chroma for the vector store. Data is isolated per session and expires after a configurable TTL. Advanced options let you tune chunking and retrieval per session.
 
 ## Stack
 
@@ -27,7 +27,7 @@ A retrieval-augmented generation (RAG) API: ingest documents, then ask questions
    cp .env.example .env
    ```
 
-   Edit `.env` for `VECTOR_STORE_PATH`, `CHUNK_SIZE`, `TOP_K`, `SESSION_TTL_SECONDS`, `SESSION_CLEANUP_INTERVAL_SECONDS`, etc.
+   Edit `.env` for `VECTOR_STORE_PATH`, `CHUNK_SIZE`, `CHUNK_OVERLAP`, `TOP_K`, `SESSION_TTL_SECONDS`, `SESSION_CLEANUP_INTERVAL_SECONDS`, etc.
 
 3. Run Ollama and pull models:
 
@@ -59,6 +59,20 @@ A retrieval-augmented generation (RAG) API: ingest documents, then ask questions
 - **TTL:** Sessions that receive no requests for `SESSION_TTL_SECONDS` (default 1800) are removed automatically. A background task runs every `SESSION_CLEANUP_INTERVAL_SECONDS` (default 30).
 - **Deduplication:** Re-ingesting the same file in a session replaces that source’s chunks (no duplicates).
 - **DELETE /session** clears the current session’s data (used by “Start new session” in the UI).
+
+## Per-session advanced options
+
+In the Streamlit UI there is an **“Advanced options”** panel that controls behavior **per browser session**:
+
+- **Chunk size (characters):** Maximum length of each stored chunk. Defaults to `CHUNK_SIZE` from `.env`.
+- **Chunk overlap (characters):** How much neighboring chunks overlap. Defaults to `CHUNK_OVERLAP`.
+- **Top K:** Number of chunks retrieved per query. Defaults to `TOP_K`.
+
+These settings:
+
+- Apply only to the current session’s uploads and questions.
+- Are sent to the FastAPI backend on each ingest/query and override the config defaults.
+- Reset only when you change them or restart the browser tab (the session’s data still respects TTL and `/session` deletion).
 
 ## API
 
