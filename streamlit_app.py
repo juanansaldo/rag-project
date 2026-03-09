@@ -16,6 +16,8 @@ if "chunk_overlap" not in st.session_state:
     st.session_state.chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "100"))
 if "top_k" not in st.session_state:
     st.session_state.top_k = int(os.getenv("TOP_K", "4"))
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
 headers = {"X-Session-ID": st.session_state.session_id}
 
@@ -64,6 +66,7 @@ if st.button("Start new session"):
     except Exception:
         pass
     st.session_state.session_id = str(uuid.uuid4())
+    st.session_state.chat_history = []
     st.rerun()
 
 headers = {"X-Session-ID": st.session_state.session_id}
@@ -88,7 +91,20 @@ with st.expander("Upload document (PDF, TXT, MD)"):
         else:
             st.error(data.get("error", "Ingest failed."))
 
-    
+# Chat history
+if st.session_state.chat_history:
+    st.subheader("Previous Q&A")
+    for i, turn in enumerate(st.session_state.chat_history):
+        with st.container():
+            st.markdown(f"**Q:** {turn['question']}")
+            st.write(turn["answer"])
+            if turn.get("sources"):
+                with st.expander("Sources", key=f"hist_sources_{i}"):
+                    for j, src in enumerate(turn["sources"], 1):
+                        st.caption(f"Source {j}: {src.get('metadata', {}).get('source', '-')}")
+                        st.write(src.get("document", ""))
+            st.divider()
+
 # Question and answer
 question = st.text_input("Ask a question", placeholder="What is in the documents?")
 if question and st.button("Ask"):
@@ -105,10 +121,10 @@ if question and st.button("Ask"):
     if "error" in data:
         st.error(data["error"])
     else:
-        st.subheader("Answer")
-        st.write(data.get("answer", ""))
-        if data.get("sources"):
-            st.subheader("Sources")
-            for i, src in enumerate(data["sources"], 1):
-                with st.expander(f"Source {i}: {src.get('metadata', {}).get('source', '-')}"):
-                    st.write(src.get("document", ""))
+        turn = {
+            "question": question,
+            "answer": data.get("answer", ""),
+            "sources": data.get("sources", []),
+        }
+        st.session_state.chat_history.append(turn)
+        st.rerun()

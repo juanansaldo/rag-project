@@ -1,6 +1,6 @@
 # RAG Project
 
-A retrieval-augmented generation (RAG) API: ingest documents, then ask questions and get answers grounded in stored content. Uses open-source models via Ollama (embeddings + LLM) and Chroma for the vector store. Data is isolated per session and expires after a configurable TTL. Advanced options let you tune chunking and retrieval per session.
+A retrieval-augmented generation (RAG) API: ingest documents, then ask questions and get answers grounded in stored content. Uses open-source models via Ollama (embeddings + LLM) and Chroma for the vector store. Data is isolated per session and expires after a configurable TTL. Advanced options let you tune chunking and retrieval per session. The Streamlit UI keeps a chat-style history of questions and answers for the current session.
 
 ## Stack
 
@@ -74,6 +74,10 @@ These settings:
 - Are sent to the FastAPI backend on each ingest/query and override the config defaults.
 - Reset only when you change them or restart the browser tab (the session’s data still respects TTL and `/session` deletion).
 
+## Chat history
+
+In the Streamlit UI, a **“Previous Q&A”** section shows all questions and answers for the current browser session. Each entry displays the question, the answer, and expandable sources. History is kept in memory only (per tab) and is cleared when you click **“Start new session”**; it is not sent to or stored by the API.
+
 ## API
 
 - **GET /health** — Liveness check; returns `{"status": "ok"}`.
@@ -102,8 +106,8 @@ These settings:
 - `app/session_db.py` — SQLite session tracking and TTL expiry
 - `vector_store/` — Chroma persistence (created on first use)
 - `data/` — Staged uploads (optional)
-- `streamlit_app.py` — Streamlit UI: session ID, upload, ingest, query, “Start new session”
-- `tests/` — Pytest: chunking, loaders, ingest, store, llm, query, session isolation, TTL cleanup, dedup
+- `streamlit_app.py` — Streamlit UI: session ID, upload, ingest, query, chat history, “Start new session”
+- `tests/` — Pytest: chunking, loaders, ingest, store, llm, query, session isolation, TTL cleanup, dedup, advanced options, chat history
 
 ## Tests
 
