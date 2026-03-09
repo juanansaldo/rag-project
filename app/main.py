@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from pydantic import BaseModel
-from fastapi import FastAPI, UploadFile, File, Header, HTTPException
+from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Form
 
 from app.config import SESSION_TTL_SECONDS, SESSION_CLEANUP_INTERVAL_SECONDS
 from app.ingest import ingest_file
@@ -68,6 +68,8 @@ def health():
 async def ingest_upload(
     file: UploadFile = File(...),
     x_session_id: str | None = Header(default=None, alias="X-Session-ID"),
+    chunk_size: int | None = Form(default=None),
+    chunk_overlap: int | None = Form(default=None),
 ):
     """Upload a single file (PDF, TXT, MD); chunk and add to vector store."""
     session_id = _require_session_id(x_session_id)
@@ -82,7 +84,12 @@ async def ingest_upload(
     path.write_bytes(content)
     
     try:
-        n = ingest_file(path, session_id=session_id)
+        n = ingest_file(
+            path,
+            session_id=session_id,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
         return {"ok": True, "chunks_added": n}
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -90,6 +97,7 @@ async def ingest_upload(
 
 class QueryRequest(BaseModel):
     question: str
+    top_k: int | None = None
 
 
 @app.post("/query")
@@ -99,7 +107,7 @@ def query(req: QueryRequest, x_session_id: str | None = Header(default=None, ali
     touch_session(session_id)
 
     try:
-        return rag_query(req.question, session_id=session_id)
+        return rag_query(req.question, session_id=session_id, top_k=req.top_k)
         
     except Exception as e:
         return {"answer": "", "sources": [], "error": str(e)}

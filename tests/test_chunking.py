@@ -1,4 +1,3 @@
-from re import X
 from app.chunking import chunk_text
 
 
@@ -23,3 +22,14 @@ def test_chunk_text_short_returns_one_chunk():
     assert len(chunks) == 1
     assert chunks[0]["text"] == "Short text."
     assert chunks[0]["index"] == 0
+
+
+def test_chunk_text_uses_override_params():
+    text = "x" * 100
+    chunks = chunk_text(text, source="s.txt", chunk_size=20, chunk_overlap=5)
+
+    assert len(chunks) > 1
+
+    for c in chunks:
+        assert len(c["text"]) <= 20
+        assert c["source"] == "s.txt"

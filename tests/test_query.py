@@ -24,3 +24,19 @@ def test_rag_query_with_hits_returns_answer_and_sources():
     assert len(result["sources"]) == 1
     assert "Paris" in result["sources"][0]["document"]
     assert result["sources"][0]["metadata"]["source"] == "doc.txt"
+
+
+def test_rag_query_uses_top_k_override():
+    fake_hits = [
+        {"document": "doc1", "metadata": {"source": "a.txt"}, "distance": 0.1}
+    ]
+
+    with patch("app.query.search", return_value=fake_hits) as mock_search, patch(
+        "app.query.generate", return_value="answer"
+    ):
+        rag_query("question", session_id="sess-1", top_k=7)
+
+    mock_search.assert_called_once()
+    _, kwargs = mock_search.call_args
+    assert kwargs["top_k"] == 7
+    assert kwargs["session_id"] == "sess-1"
