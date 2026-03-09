@@ -95,6 +95,46 @@ async def ingest_upload(
         return {"ok": False, "error": str(e)}
 
 
+@app.post("/ingest/files")
+async def ingest_upload_batch(
+    files: list[UploadFile] = File(default=[]),
+    x_session_id: str | None = Header(default=None, alias="X-Session-ID"),
+    chunk_size: int | None = Form(default=None),
+    chunk_overlap: int | None = Form(default=None),
+):
+    """Upload multiple files (PDF, TXT, MD); chunk and add to vector store. Returns total and per-file counts."""
+    session_id = _require_session_id(x_session_id)
+    touch_session(session_id)
+
+    if not files:
+        return {"ok": False, "error": "No files", "total_chunks": 0, "files": []}
+
+    total_chunks = 0
+    file_results = []
+
+    for file in files:
+        if not file.filename:
+            file_results.append({"filename": "", "chunks_added": 0, "error": "No filename"})
+            continue
+        path = Path("data") / file.filename
+        path.parent.mkdir(parents=True, exist_ok=True)
+        content = await file.read()
+        path.write_bytes(content)
+        try:
+            n = ingest_file(
+                path,
+                session_id=session_id,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
+            total_chunks += n
+            file_results.append({"filename": file.filename, "chunks_added": n})
+        except Exception as e:
+            file_results.append({"filename": file.filename, "chunks_added": 0, "error": str(e)})
+    
+    return {"ok": True, "total_chunks": total_chunks, "files": file_results}
+
+
 class QueryRequest(BaseModel):
     question: str
     top_k: int | None = None

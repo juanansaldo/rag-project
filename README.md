@@ -1,6 +1,6 @@
 # RAG Project
 
-A retrieval-augmented generation (RAG) API: ingest documents, then ask questions and get answers grounded in stored content. Uses open-source models via Ollama (embeddings + LLM) and Chroma for the vector store. Data is isolated per session and expires after a configurable TTL. Advanced options let you tune chunking and retrieval per session. The Streamlit UI keeps a chat-style history of questions and answers for the current session.
+A retrieval-augmented generation (RAG) API: ingest documents, then ask questions and get answers grounded in stored content. Uses open-source models via Ollama (embeddings + LLM) and Chroma for the vector store. Data is isolated per session and expires after a configurable TTL. Advanced options let you tune chunking and retrieval per session. The Streamlit UI keeps a chat-style history of questions and answers for the current session and supports uploading multiple documents at once.
 
 ## Stack
 
@@ -82,9 +82,11 @@ In the Streamlit UI, a **“Previous Q&A”** section shows all questions and an
 
 - **GET /health** — Liveness check; returns `{"status": "ok"}`.
 
-- **POST /ingest/file** — Upload a document (PDF, TXT, or MD). Send as **form-data** with key `file`. Include header **`X-Session-ID`**. Returns `{"ok": true, "chunks_added": n}`.
+- **POST /ingest/file** — Upload a single document (PDF, TXT, or MD). Send as **form-data** with key `file`. Include header **`X-Session-ID`**. Optional form fields: `chunk_size`, `chunk_overlap`. Returns `{"ok": true, "chunks_added": n}`.
 
   Example in Postman: Body → form-data → key `file` (type: File) → select a file; add header `X-Session-ID: your-session-id`.
+
+- **POST /ingest/files** — Upload multiple documents in one request. Send as **form-data** with key `files` (multiple file parts). Include header **`X-Session-ID`**. Optional form fields: `chunk_size`, `chunk_overlap`. Returns `{"ok": true, "total_chunks": n, "files": [{"filename": "...", "chunks_added": k}, ...]}`. The UI uses this for “Choose one or more files”.
 
 - **POST /query** — Ask a question. Body: JSON `{"question": "..."}`. Include header **`X-Session-ID`**. Returns `{"answer": "...", "sources": [...]}` (each source has `document` snippet and `metadata`).
 
@@ -94,7 +96,7 @@ In the Streamlit UI, a **“Previous Q&A”** section shows all questions and an
 
 ## Project layout
 
-- `app/main.py` — FastAPI app (health, ingest/file, query, DELETE session), lifespan cleanup
+- `app/main.py` — FastAPI app (health, ingest/file, ingest/files, query, DELETE session), lifespan cleanup
 - `app/config.py` — Settings from env
 - `app/embedding.py` — Text to vector via Ollama
 - `app/store.py` — Chroma: add/upsert chunks, search by similarity, delete by session/source
@@ -106,8 +108,8 @@ In the Streamlit UI, a **“Previous Q&A”** section shows all questions and an
 - `app/session_db.py` — SQLite session tracking and TTL expiry
 - `vector_store/` — Chroma persistence (created on first use)
 - `data/` — Staged uploads (optional)
-- `streamlit_app.py` — Streamlit UI: session ID, upload, ingest, query, chat history, “Start new session”
-- `tests/` — Pytest: chunking, loaders, ingest, store, llm, query, session isolation, TTL cleanup, dedup, advanced options, chat history
+- `streamlit_app.py` — Streamlit UI: session ID, multi-file upload, ingest, query, chat history, “Start new session”
+- `tests/` — Pytest: chunking, loaders, ingest, ingest batch, store, llm, query, session isolation, TTL cleanup, dedup, advanced options, chat history
 
 ## Tests
 

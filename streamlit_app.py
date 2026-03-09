@@ -73,13 +73,13 @@ headers = {"X-Session-ID": st.session_state.session_id}
 
 # File upload for ingest
 with st.expander("Upload document (PDF, TXT, MD)"):
-    file = st.file_uploader("Choose a file", type=["pdf", "txt", "md"])
-    if file is not None and st.button("Ingest"):
-        with httpx.Client(timeout=60.0) as client:
+    files = st.file_uploader("Choose one or more files", type=["pdf", "txt", "md"], accept_multiple_files=True)
+    if files and st.button("Ingest"):
+        with httpx.Client(timeout=120.0) as client:
             r = client.post(
-                f"{API_BASE}/ingest/file",
+                f"{API_BASE}/ingest/files",
                 headers=headers,
-                files={"file": (file.name, file.getvalue())},
+                files=[("files", (f.name, f.getvalue())) for f in files],
                 data={
                     "chunk_size": str(int(st.session_state.chunk_size)),
                     "chunk_overlap": str(int(st.session_state.chunk_overlap)),
@@ -87,7 +87,17 @@ with st.expander("Upload document (PDF, TXT, MD)"):
             )
         data = r.json()
         if data.get("ok"):
-            st.success(f"Ingested: {data.get('chunks_added', 0)} chunks added.")
+            total = data.get("total_chunks", 0)
+            n_files = len(data.get("files", []))
+            st.success(f"Ingested {total} chunks from {n_files} file(s).")
+            for item in data.get("files", []):
+                name = item.get("filename", "?")
+                n = item.get("chunks_added", 0)
+                err = item.get("error")
+                if err:
+                    st.caption(f"{name}: error - {err}")
+                else:
+                    st.caption(f"{name}: {n} chunks")
         else:
             st.error(data.get("error", "Ingest failed."))
 
