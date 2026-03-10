@@ -40,3 +40,17 @@ def test_rag_query_uses_top_k_override():
     _, kwargs = mock_search.call_args
     assert kwargs["top_k"] == 7
     assert kwargs["session_id"] == "sess-1"
+
+
+def test_rag_query_passes_model_to_generate():
+    fake_hits = [
+        {"document": "Some context.", "metadata": {"source": "x.txt"}, "distance": 0.1},
+    ]
+    with patch("app.query.search", return_value=fake_hits), patch(
+        "app.query.generate", return_value="answer"
+    ) as mock_generate:
+        rag_query("question", session_id="s1", model="phi3")
+
+    mock_generate.assert_called_once()
+    _, kwargs = mock_generate.call_args
+    assert kwargs["model"] == "phi3"

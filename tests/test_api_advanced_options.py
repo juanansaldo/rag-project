@@ -40,3 +40,17 @@ def test_query_endpoint_passes_top_k():
     _, kwargs = mock_rag.call_args
     assert kwargs["top_k"] == 9
     assert kwargs["session_id"] == "sess-1"
+
+
+def test_query_endpoint_passes_model():
+    with patch("app.main.rag_query", return_value={"answer": "a", "sources": []}) as mock_rag:
+        resp = client.post(
+            "/query",
+            headers={"X-Session-ID": "sess-1"},
+            json={"question": "q", "model": "gemma2"},
+        )
+
+    assert resp.status_code == 200
+    mock_rag.assert_called_once()
+    _, kwargs = mock_rag.call_args
+    assert kwargs["model"] == "gemma2"

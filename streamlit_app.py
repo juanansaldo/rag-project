@@ -16,6 +16,9 @@ if "chunk_overlap" not in st.session_state:
     st.session_state.chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "100"))
 if "top_k" not in st.session_state:
     st.session_state.top_k = int(os.getenv("TOP_K", "4"))
+if "llm_model" not in st.session_state:
+    default = os.getenv("LLM_MODEL", "mistral")
+    st.session_state.llm_model = default if default in ["mistral", "llama3.2", "llama3.1", "phi3", "gemma2"] else "mistral"
 
 # Chunking mode
 if "chunk_mode" not in st.session_state:
@@ -119,6 +122,13 @@ with st.expander("Advanced options"):
         key="top_k",
     )
 
+    # LLM model (Ollama)
+    st.selectbox(
+        "LLM model",
+        options=["mistral", "llama3.2", "llama3.1", "phi3", "gemma2"],
+        key="llm_model",
+    )
+
 # Session reset
 if st.button("Start new session"):
     try:
@@ -214,6 +224,7 @@ if question and st.button("Ask"):
             json={
                 "question": question,
                 "top_k": int(st.session_state.top_k),
+                "model": st.session_state.llm_model,
             },
         )
     data = r.json()

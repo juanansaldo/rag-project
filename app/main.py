@@ -159,6 +159,7 @@ async def ingest_upload_batch(
 class QueryRequest(BaseModel):
     question: str
     top_k: int | None = None
+    model: str | None = None
 
 
 @app.post("/query")
@@ -168,7 +169,7 @@ def query(req: QueryRequest, x_session_id: str | None = Header(default=None, ali
     touch_session(session_id)
 
     try:
-        return rag_query(req.question, session_id=session_id, top_k=req.top_k)
+        return rag_query(req.question, session_id=session_id, top_k=req.top_k, model=req.model)
         
     except Exception as e:
         return {"answer": "", "sources": [], "error": str(e)}
