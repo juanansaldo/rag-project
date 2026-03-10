@@ -55,7 +55,7 @@ def ingest_directory(
     """Load all supported files from directory, chunk, add to store. Returns total chunks added."""
     dir_path = Path(dir_path)
     total = 0
-    for ext in ("*.txt", "*.md", "*.pdf"):
+    for ext in ("*.txt", "*.md", "*.pdf", "*.html", "*.csv", "*.docx"):
         for f in dir_path.glob(ext):
             total += ingest_file(
                 f,

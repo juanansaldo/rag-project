@@ -18,6 +18,9 @@ def _require_session_id(x_session_id: str | None) -> str:
     return x_session_id
 
 
+ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".html", ".csv", ".docx"}
+
+
 def _cleanup_expired_sessions() -> int:
     """Delete expired sessions from vector store and session DB."""
     expired = get_expired_sessions(SESSION_TTL_SECONDS)
@@ -77,8 +80,11 @@ async def ingest_upload(
 
     if not file.filename:
         return {"ok": False, "error": "No filename"}
-    
+
     path = Path("data") / file.filename
+    if path.suffix.lower() not in ALLOWED_EXTENSIONS:
+        return {"ok": False, "error": f"Unsupported file type: {path.suffix}"}
+
     path.parent.mkdir(parents=True, exist_ok=True)
     content = await file.read()
     path.write_bytes(content)
@@ -116,7 +122,16 @@ async def ingest_upload_batch(
         if not file.filename:
             file_results.append({"filename": "", "chunks_added": 0, "error": "No filename"})
             continue
+        
         path = Path("data") / file.filename
+        if path.suffix.lower() not in ALLOWED_EXTENSIONS:
+            file_results.append({
+                "filename": file.filename,
+                "chunks_added": 0,
+                "error": f"Unsupported file type: {path.suffix}",
+            })
+            continue
+
         path.parent.mkdir(parents=True, exist_ok=True)
         content = await file.read()
         path.write_bytes(content)

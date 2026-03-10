@@ -1,6 +1,6 @@
 # RAG Project
 
-A retrieval-augmented generation (RAG) API: ingest documents, then ask questions and get answers grounded in stored content. Uses open-source models via Ollama (embeddings + LLM) and Chroma for the vector store. Data is isolated per session and expires after a configurable TTL. Advanced options let you tune chunking and retrieval per session. The Streamlit UI keeps a chat-style history of questions and answers for the current session, supports uploading multiple documents at once, and uses a single flow: documents are ingested automatically when you select files (no separate Ingest button).
+A retrieval-augmented generation (RAG) API: ingest documents, then ask questions and get answers grounded in stored content. Uses open-source models via Ollama (embeddings + LLM) and Chroma for the vector store. Data is isolated per session and expires after a configurable TTL. Advanced options let you tune chunking and retrieval per session. The Streamlit UI keeps a chat-style history of questions and answers for the current session, supports uploading multiple documents at once, and uses a single flow: documents are ingested automatically when you select files (no separate Ingest button). Supported formats: PDF, TXT, MD, HTML, CSV, and DOCX.
 
 ## Stack
 
@@ -74,6 +74,18 @@ These settings:
 - Are sent to the FastAPI backend on each ingest/query and override the config defaults.
 - Reset only when you change them or restart the browser tab (the session’s data still respects TTL and `/session` deletion).
 
+## Supported file types
+
+The ingest pipeline accepts:
+
+- **PDF** — One item per page; text extracted via pypdf.
+- **TXT, MD** — Read as plain text (UTF-8).
+- **HTML** — Tags stripped; text content extracted for chunking.
+- **CSV** — Rows flattened to a single text block (one line per row).
+- **DOCX** — Paragraph text extracted via python-docx.
+
+The API rejects other extensions with `Unsupported file type`. The UI file picker is limited to these types.
+
 ## Single-flow upload
 
 In the Streamlit UI, **ingest runs automatically** when you choose one or more files in the upload area. There is no separate “Ingest” button: once the file selection changes, the app sends the files to `POST /ingest/files` and shows chunk counts. The same selection is not re-ingested on later runs; change the selection or click “Start new session” to ingest again. This keeps the flow to: select files → (auto-ingest) → ask questions.
@@ -86,11 +98,11 @@ In the Streamlit UI, a **“Previous Q&A”** section shows all questions and an
 
 - **GET /health** — Liveness check; returns `{"status": "ok"}`.
 
-- **POST /ingest/file** — Upload a single document (PDF, TXT, or MD). Send as **form-data** with key `file`. Include header **`X-Session-ID`**. Optional form fields: `chunk_size`, `chunk_overlap`. Returns `{"ok": true, "chunks_added": n}`.
+- **POST /ingest/file** — Upload a single document (PDF, TXT, MD, HTML, CSV, or DOCX). Send as **form-data** with key `file`. Include header **`X-Session-ID`**. Optional form fields: `chunk_size`, `chunk_overlap`. Returns `{"ok": true, "chunks_added": n}`.
 
   Example in Postman: Body → form-data → key `file` (type: File) → select a file; add header `X-Session-ID: your-session-id`.
 
-- **POST /ingest/files** — Upload multiple documents in one request. Send as **form-data** with key `files` (multiple file parts). Include header **`X-Session-ID`**. Optional form fields: `chunk_size`, `chunk_overlap`. Returns `{"ok": true, "total_chunks": n, "files": [{"filename": "...", "chunks_added": k}, ...]}`. The UI uses this for “Choose one or more files”.
+- **POST /ingest/files** — Upload multiple documents in one request (same formats as above). Send as **form-data** with key `files` (multiple file parts). Include header **`X-Session-ID`**. Optional form fields: `chunk_size`, `chunk_overlap`. Returns `{"ok": true, "total_chunks": n, "files": [{"filename": "...", "chunks_added": k}, ...]}`. The UI uses this for “Choose one or more files”.
 
 - **POST /query** — Ask a question. Body: JSON `{"question": "..."}`. Include header **`X-Session-ID`**. Returns `{"answer": "...", "sources": [...]}` (each source has `document` snippet and `metadata`).
 
@@ -107,7 +119,7 @@ In the Streamlit UI, a **“Previous Q&A”** section shows all questions and an
 - `app/llm.py` — Call Mistral via Ollama for generation
 - `app/query.py` — RAG pipeline: retrieve → prompt → generate (session-scoped)
 - `app/chunking.py` — Split text into overlapping chunks
-- `app/loaders.py` — Load PDF, TXT, MD from file or directory
+- `app/loaders.py` — Load PDF, TXT, MD, HTML, CSV, DOCX from file or directory
 - `app/ingest.py` — Ingest pipeline: load → chunk → upsert (re-ingest replaces by source)
 - `app/session_db.py` — SQLite session tracking and TTL expiry
 - `vector_store/` — Chroma persistence (created on first use)

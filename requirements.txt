@@ -3,6 +3,7 @@ streamlit
 fastapi
 uvicorn[standard]
 python-dotenv
+python-docx
 chromadb
 ollama
 pytest

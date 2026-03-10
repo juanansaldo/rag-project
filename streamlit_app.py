@@ -78,8 +78,12 @@ if st.button("Start new session"):
 headers = {"X-Session-ID": st.session_state.session_id}
 
 # File upload for ingest
-with st.expander("Upload document (PDF, TXT, MD)"):
-    files = st.file_uploader("Choose one or more files", type=["pdf", "txt", "md"], accept_multiple_files=True)
+with st.expander("Upload document (PDF, TXT, MD, HTML, CSV, DOCX)"):
+    files = st.file_uploader(
+        "Choose one or more files", 
+        type=["pdf", "txt", "md", "html", "csv", "docx"], 
+        accept_multiple_files=True,
+    )
     if files:
         fingerprint = tuple((f.name, len(f.getvalue())) for f in sorted(files, key=lambda x: x.name))
         if fingerprint != st.session_state.last_ingested_fingerprint:
