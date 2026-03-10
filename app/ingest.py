@@ -11,6 +11,7 @@ def ingest_file(
     session_id: str = "default",
     chunk_size: int | None = None,
     chunk_overlap: int | None = None,
+    chunk_by_words: bool = False,
 ) -> int:
     """Load one file, chunk, add to store. Returns number of chunks added."""
     pages = load_document(path)
@@ -32,6 +33,7 @@ def ingest_file(
             source=source,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
+            by_words=chunk_by_words,
         ):
             text = c["text"]
             fingerprint = hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
@@ -51,6 +53,7 @@ def ingest_directory(
     session_id: str = "default",
     chunk_size: int | None = None,
     chunk_overlap: int | None = None,
+    chunk_by_words: bool = False,
 ) -> int:
     """Load all supported files from directory, chunk, add to store. Returns total chunks added."""
     dir_path = Path(dir_path)
@@ -62,5 +65,6 @@ def ingest_directory(
                 session_id=session_id,
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
+                chunk_by_words=chunk_by_words,
             )
     return total

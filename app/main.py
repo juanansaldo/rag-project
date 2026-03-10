@@ -73,6 +73,7 @@ async def ingest_upload(
     x_session_id: str | None = Header(default=None, alias="X-Session-ID"),
     chunk_size: int | None = Form(default=None),
     chunk_overlap: int | None = Form(default=None),
+    chunk_by_words_raw: str | None = Form(default=None),
 ):
     """Upload a single file (PDF, TXT, MD); chunk and add to vector store."""
     session_id = _require_session_id(x_session_id)
@@ -90,11 +91,13 @@ async def ingest_upload(
     path.write_bytes(content)
     
     try:
+        by_words = chunk_by_words_raw is not None and str(chunk_by_words_raw).lower() in ("true", "1", "on")
         n = ingest_file(
             path,
             session_id=session_id,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
+            chunk_by_words=by_words,
         )
         return {"ok": True, "chunks_added": n}
     except Exception as e:
@@ -107,6 +110,7 @@ async def ingest_upload_batch(
     x_session_id: str | None = Header(default=None, alias="X-Session-ID"),
     chunk_size: int | None = Form(default=None),
     chunk_overlap: int | None = Form(default=None),
+    chunk_by_words_raw: str | None = Form(default=None),
 ):
     """Upload multiple files (PDF, TXT, MD); chunk and add to vector store. Returns total and per-file counts."""
     session_id = _require_session_id(x_session_id)
@@ -136,11 +140,13 @@ async def ingest_upload_batch(
         content = await file.read()
         path.write_bytes(content)
         try:
+            by_words = chunk_by_words_raw is not None and str(chunk_by_words_raw).lower() in ("true", "1", "on")
             n = ingest_file(
                 path,
                 session_id=session_id,
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
+                chunk_by_words=by_words,
             )
             total_chunks += n
             file_results.append({"filename": file.filename, "chunks_added": n})

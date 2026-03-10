@@ -16,6 +16,15 @@ if "chunk_overlap" not in st.session_state:
     st.session_state.chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "100"))
 if "top_k" not in st.session_state:
     st.session_state.top_k = int(os.getenv("TOP_K", "4"))
+
+# Chunking mode
+if "chunk_mode" not in st.session_state:
+    st.session_state.chunk_mode = "Words" if st.session_state.get("chunk_by_words") else "Characters"
+if "chunk_by_words" not in st.session_state:
+    st.session_state.chunk_by_words = (st.session_state.chunk_mode == "Words")
+if "_last_chunk_by_words" not in st.session_state:
+    st.session_state._last_chunk_by_words = st.session_state.chunk_by_words
+
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "last_ingested_fingerprint" not in st.session_state:
@@ -31,27 +40,75 @@ st.caption(f"Session: {st.session_state.session_id[:8]}...")
 
 # Advanced options panel
 with st.expander("Advanced options"):
-    # Chunk size
-    st.number_input(
-        "Chunk size (characters)",
-        min_value=64,
-        max_value=4096,
-        step=1,
-        key="chunk_size",
+    # Chunking mode toggle
+    selected_mode = st.radio(
+        "Chunk by",
+        ["Characters", "Words"],
+        key="chunk_mode",
+        horizontal=True,
     )
+    st.session_state.chunk_by_words = (selected_mode == "Words")
 
-    # Chunk overlap
-    max_overlap = max(0, int(st.session_state.chunk_size) - 1)
-    if int(st.session_state.chunk_overlap) > max_overlap:
-        st.session_state.chunk_overlap = max_overlap
+    # If mode changed, reset defaults for that mode
+    if st.session_state._last_chunk_by_words != st.session_state.chunk_by_words:
+        st.session_state._last_chunk_by_words = st.session_state.chunk_by_words
+        if st.session_state.chunk_by_words:
+            # Word-based defaults
+            word_size_default = int(os.getenv("CHUNK_SIZE_WORDS", "100"))
+            word_overlap_default = int(os.getenv("CHUNK_OVERLAP_WORDS", "20"))
+            st.session_state.chunk_size = word_size_default
+            st.session_state.chunk_overlap = word_overlap_default
+        else:
+            # Character-based defaults
+            char_size_default = int(os.getenv("CHUNK_SIZE", "512"))
+            char_overlap_default = int(os.getenv("CHUNK_OVERLAP", "100"))
+            st.session_state.chunk_size = char_size_default
+            st.session_state.chunk_overlap = char_overlap_default
 
-    st.number_input(
-        "Chunk overlap (characters)",
-        min_value=0,
-        max_value=max_overlap,
-        step=1,
-        key="chunk_overlap",
-    )
+    # Chunk size / overlap widgets, depending on mode
+    if st.session_state.chunk_by_words:
+        # Word-based chunking
+        st.number_input(
+            "Chunk size (words)",
+            min_value=10,
+            max_value=500,
+            step=1,
+            key="chunk_size",
+        )
+
+        max_overlap = max(0, int(st.session_state.chunk_size) - 1)
+        if int(st.session_state.chunk_overlap) > max_overlap:
+            st.session_state.chunk_overlap = max_overlap
+
+        st.number_input(
+            "Chunk overlap (words)",
+            min_value=0,
+            max_value=max_overlap,
+            step=1,
+            key="chunk_overlap",
+        )
+    else:
+        # Character-based chunking
+        st.number_input(
+            "Chunk size (characters)",
+            min_value=64,
+            max_value=4096,
+            step=1,
+            key="chunk_size",
+        )
+
+        # Chunk overlap
+        max_overlap = max(0, int(st.session_state.chunk_size) - 1)
+        if int(st.session_state.chunk_overlap) > max_overlap:
+            st.session_state.chunk_overlap = max_overlap
+
+        st.number_input(
+            "Chunk overlap (characters)",
+            min_value=0,
+            max_value=max_overlap,
+            step=1,
+            key="chunk_overlap",
+        )
 
     # Top K
     st.number_input(
@@ -96,6 +153,7 @@ with st.expander("Upload document (PDF, TXT, MD, HTML, CSV, DOCX)"):
                         data={
                             "chunk_size": str(int(st.session_state.chunk_size)),
                             "chunk_overlap": str(int(st.session_state.chunk_overlap)),
+                            "chunk_by_words": "true" if st.session_state.chunk_by_words else "false",
                         }
                     )
             data = r.json()

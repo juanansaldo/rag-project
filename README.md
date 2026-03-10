@@ -27,7 +27,7 @@ A retrieval-augmented generation (RAG) API: ingest documents, then ask questions
    cp .env.example .env
    ```
 
-   Edit `.env` for `VECTOR_STORE_PATH`, `CHUNK_SIZE`, `CHUNK_OVERLAP`, `TOP_K`, `SESSION_TTL_SECONDS`, `SESSION_CLEANUP_INTERVAL_SECONDS`, etc.
+   Edit `.env` for `VECTOR_STORE_PATH`, `CHUNK_SIZE`, `CHUNK_OVERLAP`, `CHUNK_SIZE_WORDS`, `CHUNK_OVERLAP_WORDS`, `TOP_K`, `SESSION_TTL_SECONDS`, `SESSION_CLEANUP_INTERVAL_SECONDS`, etc.
 
 3. Run Ollama and pull models:
 
@@ -64,8 +64,11 @@ A retrieval-augmented generation (RAG) API: ingest documents, then ask questions
 
 In the Streamlit UI there is an **“Advanced options”** panel that controls behavior **per browser session**:
 
-- **Chunk size (characters):** Maximum length of each stored chunk. Defaults to `CHUNK_SIZE` from `.env`.
-- **Chunk overlap (characters):** How much neighboring chunks overlap. Defaults to `CHUNK_OVERLAP`.
+- **Chunk by:** Toggle between **Characters** and **Words**.
+  - **Characters (default):** Chunk by character count. Defaults: chunk size `CHUNK_SIZE` (e.g. 512), overlap `CHUNK_OVERLAP` (e.g. 100).
+  - **Words:** Chunk by word count. Defaults: chunk size `CHUNK_SIZE_WORDS` (e.g. 100), overlap `CHUNK_OVERLAP_WORDS` (e.g. 20). When you switch to Words, the UI resets size/overlap to these defaults.
+- **Chunk size:** Maximum length per chunk (in characters or words, depending on mode). Labels and ranges update with the selected mode.
+- **Chunk overlap:** Overlap between neighboring chunks (same unit as chunk size). Clamped so overlap < chunk size.
 - **Top K:** Number of chunks retrieved per query. Defaults to `TOP_K`.
 
 These settings:
@@ -98,13 +101,13 @@ In the Streamlit UI, a **“Previous Q&A”** section shows all questions and an
 
 - **GET /health** — Liveness check; returns `{"status": "ok"}`.
 
-- **POST /ingest/file** — Upload a single document (PDF, TXT, MD, HTML, CSV, or DOCX). Send as **form-data** with key `file`. Include header **`X-Session-ID`**. Optional form fields: `chunk_size`, `chunk_overlap`. Returns `{"ok": true, "chunks_added": n}`.
+- **POST /ingest/file** — Upload a single document (PDF, TXT, MD, HTML, CSV, or DOCX). Send as **form-data** with key `file`. Include header **`X-Session-ID`**. Optional form fields: `chunk_size`, `chunk_overlap`, `chunk_by_words` (`"true"` or `"false"` for word-based chunking). Returns `{"ok": true, "chunks_added": n}`.
 
   Example in Postman: Body → form-data → key `file` (type: File) → select a file; add header `X-Session-ID: your-session-id`.
 
-- **POST /ingest/files** — Upload multiple documents in one request (same formats as above). Send as **form-data** with key `files` (multiple file parts). Include header **`X-Session-ID`**. Optional form fields: `chunk_size`, `chunk_overlap`. Returns `{"ok": true, "total_chunks": n, "files": [{"filename": "...", "chunks_added": k}, ...]}`. The UI uses this for “Choose one or more files”.
+- **POST /ingest/files** — Upload multiple documents in one request (same formats as above). Send as **form-data** with key `files` (multiple file parts). Include header **`X-Session-ID`**. Optional form fields: `chunk_size`, `chunk_overlap`, `chunk_by_words` (`"true"` or `"false"` for word-based chunking). Returns `{"ok": true, "total_chunks": n, "files": [{"filename": "...", "chunks_added": k}, ...]}`. The UI uses this for “Choose one or more files”.
 
-- **POST /query** — Ask a question. Body: JSON `{"question": "..."}`. Include header **`X-Session-ID`**. Returns `{"answer": "...", "sources": [...]}` (each source has `document` snippet and `metadata`).
+- **POST /query** — Ask a question. Body: JSON `{"question": "...", "top_k": optional int}`. Include header **`X-Session-ID`**. Returns `{"answer": "...", "sources": [...]}` (each source has `document` snippet and `metadata`).
 
   Example in Postman: Body → raw → JSON → `{"question": "What is in the document?"}`; add header `X-Session-ID: your-session-id`.
 
@@ -118,14 +121,14 @@ In the Streamlit UI, a **“Previous Q&A”** section shows all questions and an
 - `app/store.py` — Chroma: add/upsert chunks, search by similarity, delete by session/source
 - `app/llm.py` — Call Mistral via Ollama for generation
 - `app/query.py` — RAG pipeline: retrieve → prompt → generate (session-scoped)
-- `app/chunking.py` — Split text into overlapping chunks
+- `app/chunking.py` — Split text into overlapping chunks (character-based or word-based; configurable size/overlap)
 - `app/loaders.py` — Load PDF, TXT, MD, HTML, CSV, DOCX from file or directory
 - `app/ingest.py` — Ingest pipeline: load → chunk → upsert (re-ingest replaces by source)
 - `app/session_db.py` — SQLite session tracking and TTL expiry
 - `vector_store/` — Chroma persistence (created on first use)
 - `data/` — Staged uploads (optional)
-- `streamlit_app.py` — Streamlit UI: session ID, multi-file upload, auto-ingest (single flow), query, chat history, “Start new session”
-- `tests/` — Pytest: chunking, loaders, ingest, ingest batch, single-flow fingerprint, store, llm, query, session isolation, TTL cleanup, dedup, advanced options, chat history
+- `streamlit_app.py` — Streamlit UI: session ID, advanced options (chunk by characters/words, chunk size/overlap, top K), multi-file upload, auto-ingest (single flow), query, chat history, “Start new session”
+- `tests/` — Pytest: chunking (character + word mode), loaders, ingest, ingest batch, single-flow fingerprint, store, llm, query, session isolation, TTL cleanup, dedup, advanced options, chat history
 
 ## Tests
 
