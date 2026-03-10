@@ -1,4 +1,5 @@
 import uuid
+import threading
 import streamlit as st
 import httpx
 import os
@@ -37,8 +38,36 @@ if "last_ingested_result" not in st.session_state:
 
 if "confirm_new_session" not in st.session_state:
     st.session_state.confirm_new_session = False
+if "ingest_thread" not in st.session_state:
+    st.session_state.ingest_thread = None
+if "ingest_in_progress" not in st.session_state:
+    st.session_state.ingest_in_progress = False
+if "_ingest_result_holder" not in st.session_state:
+    st.session_state._ingest_result_holder = {}
 
 headers = {"X-Session-ID": st.session_state.session_id}
+
+
+def _run_ingest_in_thread(holder, file_tuples, req_headers, chunk_size, chunk_overlap, chunk_by_words):
+    try:
+        with httpx.Client(timeout=120.0) as client:
+            r = client.post(
+                f"{API_BASE}/ingest/files",
+                headers=req_headers,
+                files=[("files", (name, content)) for name, content in file_tuples],
+                data={
+                    "chunk_size": str(chunk_size),
+                    "chunk_overlap": str(chunk_overlap),
+                    "chunk_by_words": "true" if chunk_by_words else "false",
+                },
+            )
+        data = r.json()
+        holder["done"] = True
+        holder["data"] = data
+    except Exception as e:
+        holder["done"] = True
+        holder["data"] = {"ok": False, "error": str(e)}
+
 
 st.set_page_config(page_title="RAG Chat", layout="centered")
 st.title("RAG Q&A")
@@ -148,6 +177,9 @@ if st.session_state.confirm_new_session:
             st.session_state.last_ingested_fingerprint = None
             st.session_state.last_ingested_result = None
             st.session_state.confirm_new_session = False
+            st.session_state.ingest_in_progress = False
+            st.session_state.ingest_thread = None
+            st.session_state._ingest_result_holder.clear()
             st.rerun()
     with col2:
         if st.button("Cancel"):
@@ -167,53 +199,65 @@ with st.expander("Upload document (PDF, TXT, MD, HTML, CSV, DOCX)"):
         type=["pdf", "txt", "md", "html", "csv", "docx"], 
         accept_multiple_files=True,
     )
+    # Sync completed background ingest from holder into session state
+    holder = st.session_state._ingest_result_holder
+    if holder.get("done"):
+        st.session_state.ingest_in_progress = False
+        st.session_state.ingest_thread = None
+        data = holder.get("data", {})
+        fp = holder.get("fingerprint")
+        if fp is not None:
+            st.session_state.last_ingested_fingerprint = fp
+        if data.get("ok"):
+            total = data.get("total_chunks", 0)
+            n_files = len(data.get("files", []))
+            summary = f"Ingested {total} chunks from {n_files} file(s)."
+            file_details = [
+                {"name": item.get("filename", "?"), "n": item.get("chunks_added", 0), "error": item.get("error")}
+                for item in data.get("files", [])
+            ]
+            st.session_state.last_ingested_result = {"summary": summary, "file_details": file_details}
+        else:
+            st.session_state.last_ingested_result = None
+        holder.clear()
+
     if files:
         fingerprint = tuple((f.name, len(f.getvalue())) for f in sorted(files, key=lambda x: x.name))
         if fingerprint != st.session_state.last_ingested_fingerprint:
-            with st.spinner("Ingesting..."):
-                with httpx.Client(timeout=120.0) as client:
-                    r = client.post(
-                        f"{API_BASE}/ingest/files",
-                        headers=headers,
-                        files=[("files", (f.name, f.getvalue())) for f in files],
-                        data={
-                            "chunk_size": str(int(st.session_state.chunk_size)),
-                            "chunk_overlap": str(int(st.session_state.chunk_overlap)),
-                            "chunk_by_words": "true" if st.session_state.chunk_by_words else "false",
-                        }
-                    )
-            data = r.json()
-            if data.get("ok"):
-                st.session_state.last_ingested_fingerprint = fingerprint
-                total = data.get("total_chunks", 0)
-                n_files = len(data.get("files", []))
-                summary = f"Ingested {total} chunks from {n_files} file(s)."
-                file_details = [
-                    {"name": item.get("filename", "?"), "n": item.get("chunks_added", 0), "error": item.get("error")}
-                    for item in data.get("files", [])
-                ]
-                st.session_state.last_ingested_result = {"summary": summary, "file_details": file_details}
-                st.success(summary)
-                for fd in file_details:
-                    if fd["error"]:
-                        st.caption(f"{fd['name']}: error - {fd['error']}")
-                    else:
-                        st.caption(f"{fd['name']}: {fd['n']} chunks")
-            else:
-                st.session_state.last_ingested_result = None
-                st.error(data.get("error", "Ingest failed."))
+            if not st.session_state.ingest_in_progress:
+                # Start background ingest
+                file_tuples = [(f.name, f.getvalue()) for f in files]
+                req_headers = {"X-Session-ID": st.session_state.session_id}
+                st.session_state._ingest_result_holder["fingerprint"] = fingerprint
+                thread = threading.Thread(
+                    target=_run_ingest_in_thread,
+                    args=(
+                        st.session_state._ingest_result_holder,
+                        file_tuples,
+                        req_headers,
+                        int(st.session_state.chunk_size),
+                        int(st.session_state.chunk_overlap),
+                        st.session_state.chunk_by_words,
+                    ),
+                )
+                thread.daemon = True
+                thread.start()
+                st.session_state.ingest_thread = thread
+                st.session_state.ingest_in_progress = True
+                st.rerun()
+
+        if st.session_state.ingest_in_progress:
+            st.info("Ingesting in background... You can ask a question below; it will run after ingest completes.")
+        elif st.session_state.last_ingested_result:
+            res = st.session_state.last_ingested_result
+            st.success(res["summary"])
+            for fd in res["file_details"]:
+                if fd.get("error"):
+                    st.caption(f"{fd['name']}: error - {fd['error']}")
+                else:
+                    st.caption(f"{fd['name']}: {fd['n']} chunks")
         else:
-            # Show stored last result
-            if st.session_state.last_ingested_result:
-                res = st.session_state.last_ingested_result
-                st.success(res["summary"])
-                for fd in res["file_details"]:
-                    if fd["error"]:
-                        st.caption(f"{fd['name']}: error - {fd['error']}")
-                    else:
-                        st.caption(f"{fd['name']}: {fd['n']} chunks")
-            else:
-                st.info("Documents already ingested. Ask a question below or change the file selection to re-ingest.")
+            st.info("Documents already ingested. Ask a question below or change the file selection to re-ingest")
 
 
 # Chat history
@@ -233,6 +277,33 @@ if st.session_state.chat_history:
 # Question and answer
 question = st.text_input("Ask a question", placeholder="What is in the documents?")
 if question and st.button("Ask"):
+    # Wait for background ingest to finish if still running
+    if st.session_state.ingest_in_progress and st.session_state.ingest_thread is not None:
+        if st.session_state.ingest_thread.is_alive():
+            with st.spinner("Waiting for ingest to complete..."):
+                st.session_state.ingest_thread.join(timeout=120.0)
+        # Sync holder into session state so last_ingested_fingerprint is up to date
+        holder = st.session_state._ingest_result_holder
+        if holder.get("done"):
+            st.session_state.ingest_in_progress = False
+            st.session_state.ingest_thread = None
+            data = holder.get("data", {})
+            fp = holder.get("fingerprint")
+            if fp is not None:
+                st.session_state.last_ingested_fingerprint = fp
+            if data.get("ok"):
+                total = data.get("total_chunks", 0)
+                n_files = len(data.get("files", []))
+                summary = f"Ingested {total} chunks from {n_files} file(s)."
+                file_details = [
+                    {"name": item.get("filename", "?"), "n": item.get("chunks_added", 0), "error": item.get("error")}
+                    for item in data.get("files", [])
+                ]
+                st.session_state.last_ingested_result = {"summary": summary, "file_details": file_details}
+            else:
+                st.session_state.last_ingested_result = None
+            holder.clear()
+
     with httpx.Client(timeout=60.0) as client:
         r = client.post(
             f"{API_BASE}/query", 

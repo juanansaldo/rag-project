@@ -1,6 +1,6 @@
 # RAG Project
 
-A retrieval-augmented generation (RAG) API: ingest documents, then ask questions and get answers grounded in stored content. Uses open-source models via Ollama (embeddings + LLM) and Chroma for the vector store. Data is isolated per session and expires after a configurable TTL. Advanced options let you tune chunking and retrieval per session. The Streamlit UI keeps a chat-style history of questions and answers for the current session, supports uploading multiple documents at once, and uses a single flow: documents are ingested automatically when you select files (no separate Ingest button). Supported formats: PDF, TXT, MD, HTML, CSV, and DOCX.
+A retrieval-augmented generation (RAG) API: ingest documents, then ask questions and get answers grounded in stored content. Uses open-source models via Ollama (embeddings + LLM) and Chroma for the vector store. Data is isolated per session and expires after a configurable TTL. Advanced options let you tune chunking and retrieval per session. The Streamlit UI keeps a chat-style history of questions and answers for the current session, supports uploading multiple documents at once, and uses a single flow: when you select files, ingest runs **in the background** so you can type and submit a question immediately; if ingest is still running when you click Ask, the app waits for it to finish before running the query. Supported formats: PDF, TXT, MD, HTML, CSV, and DOCX.
 
 ## Stack
 
@@ -90,9 +90,9 @@ The ingest pipeline accepts:
 
 The API rejects other extensions with `Unsupported file type`. The UI file picker is limited to these types.
 
-## Single-flow upload
+## Single-flow upload and background ingest
 
-In the Streamlit UI, **ingest runs automatically** when you choose one or more files in the upload area. There is no separate “Ingest” button: once the file selection changes, the app sends the files to `POST /ingest/files` and shows chunk counts. The same selection is not re-ingested on later runs; change the selection or click “Start new session” to ingest again. This keeps the flow to: select files → (auto-ingest) → ask questions.
+In the Streamlit UI, **ingest runs automatically in the background** when you choose one or more files in the upload area. There is no separate “Ingest” button and the UI does not block: once the file selection changes, the app starts ingest in a background thread and you can use the chat and question box right away. If you submit a question while ingest is still running, the app waits for ingest to complete (with a timeout) before running the RAG query. When ingest finishes, the upload area shows the chunk count and success message. The same selection is not re-ingested on later runs; change the selection or click “Start new session” to ingest again. Flow: select files → (background ingest) → ask questions anytime; query step waits for ingest when needed.
 
 ## Chat history
 
@@ -128,7 +128,7 @@ In the Streamlit UI, a **“Previous Q&A”** section shows all questions and an
 - `app/session_db.py` — SQLite session tracking and TTL expiry
 - `vector_store/` — Chroma persistence (created on first use)
 - `data/` — Staged uploads (optional)
-- `streamlit_app.py` — Streamlit UI: session ID, advanced options (chunk by characters/words, chunk size/overlap, top K, LLM model), multi-file upload, auto-ingest (single flow), query, chat history, “Start new session”
+- `streamlit_app.py` — Streamlit UI: session ID, advanced options (chunk by characters/words, chunk size/overlap, top K, LLM model), multi-file upload, background auto-ingest (single flow), query (waits for ingest when needed), chat history, “Start new session”
 - `tests/` — Pytest: chunking (character + word mode), loaders, ingest, ingest batch, single-flow fingerprint, store, llm (including model override), query, session isolation, TTL cleanup, dedup, advanced options, chat history
 
 ## Tests
