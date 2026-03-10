@@ -18,6 +18,10 @@ if "top_k" not in st.session_state:
     st.session_state.top_k = int(os.getenv("TOP_K", "4"))
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+if "last_ingested_fingerprint" not in st.session_state:
+    st.session_state.last_ingested_fingerprint = None
+if "last_ingested_result" not in st.session_state:
+    st.session_state.last_ingested_result = None
 
 headers = {"X-Session-ID": st.session_state.session_id}
 
@@ -67,6 +71,8 @@ if st.button("Start new session"):
         pass
     st.session_state.session_id = str(uuid.uuid4())
     st.session_state.chat_history = []
+    st.session_state.last_ingested_fingerprint = None
+    st.session_state.last_ingested_result = None
     st.rerun()
 
 headers = {"X-Session-ID": st.session_state.session_id}
@@ -74,32 +80,53 @@ headers = {"X-Session-ID": st.session_state.session_id}
 # File upload for ingest
 with st.expander("Upload document (PDF, TXT, MD)"):
     files = st.file_uploader("Choose one or more files", type=["pdf", "txt", "md"], accept_multiple_files=True)
-    if files and st.button("Ingest"):
-        with httpx.Client(timeout=120.0) as client:
-            r = client.post(
-                f"{API_BASE}/ingest/files",
-                headers=headers,
-                files=[("files", (f.name, f.getvalue())) for f in files],
-                data={
-                    "chunk_size": str(int(st.session_state.chunk_size)),
-                    "chunk_overlap": str(int(st.session_state.chunk_overlap)),
-                },
-            )
-        data = r.json()
-        if data.get("ok"):
-            total = data.get("total_chunks", 0)
-            n_files = len(data.get("files", []))
-            st.success(f"Ingested {total} chunks from {n_files} file(s).")
-            for item in data.get("files", []):
-                name = item.get("filename", "?")
-                n = item.get("chunks_added", 0)
-                err = item.get("error")
-                if err:
-                    st.caption(f"{name}: error - {err}")
-                else:
-                    st.caption(f"{name}: {n} chunks")
+    if files:
+        fingerprint = tuple((f.name, len(f.getvalue())) for f in sorted(files, key=lambda x: x.name))
+        if fingerprint != st.session_state.last_ingested_fingerprint:
+            with st.spinner("Ingesting..."):
+                with httpx.Client(timeout=120.0) as client:
+                    r = client.post(
+                        f"{API_BASE}/ingest/files",
+                        headers=headers,
+                        files=[("files", (f.name, f.getvalue())) for f in files],
+                        data={
+                            "chunk_size": str(int(st.session_state.chunk_size)),
+                            "chunk_overlap": str(int(st.session_state.chunk_overlap)),
+                        }
+                    )
+            data = r.json()
+            if data.get("ok"):
+                st.session_state.last_ingested_fingerprint = fingerprint
+                total = data.get("total_chunks", 0)
+                n_files = len(data.get("files", []))
+                summary = f"Ingested {total} chunks from {n_files} file(s)."
+                file_details = [
+                    {"name": item.get("filename", "?"), "n": item.get("chunks_added", 0), "error": item.get("error")}
+                    for item in data.get("files", [])
+                ]
+                st.session_state.last_ingested_result = {"summary": summary, "file_details": file_details}
+                st.success(summary)
+                for fd in file_details:
+                    if fd["error"]:
+                        st.caption(f"{fd['name']}: error - {fd['error']}")
+                    else:
+                        st.caption(f"{fd['name']}: {fd['n']} chunks")
+            else:
+                st.session_state.last_ingested_result = None
+                st.error(data.get("error", "Ingest failed."))
         else:
-            st.error(data.get("error", "Ingest failed."))
+            # Show stored last result
+            if st.session_state.last_ingested_result:
+                res = st.session_state.last_ingested_result
+                st.success(res["summary"])
+                for fd in res["file_details"]:
+                    if fd["error"]:
+                        st.caption(f"{fd['name']}: error - {fd['error']}")
+                    else:
+                        st.caption(f"{fd['name']}: {fd['n']} chunks")
+            else:
+                st.info("Documents already ingested. Ask a question below or change the file selection to re-ingest.")
+
 
 # Chat history
 if st.session_state.chat_history:

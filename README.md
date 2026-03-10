@@ -1,6 +1,6 @@
 # RAG Project
 
-A retrieval-augmented generation (RAG) API: ingest documents, then ask questions and get answers grounded in stored content. Uses open-source models via Ollama (embeddings + LLM) and Chroma for the vector store. Data is isolated per session and expires after a configurable TTL. Advanced options let you tune chunking and retrieval per session. The Streamlit UI keeps a chat-style history of questions and answers for the current session and supports uploading multiple documents at once.
+A retrieval-augmented generation (RAG) API: ingest documents, then ask questions and get answers grounded in stored content. Uses open-source models via Ollama (embeddings + LLM) and Chroma for the vector store. Data is isolated per session and expires after a configurable TTL. Advanced options let you tune chunking and retrieval per session. The Streamlit UI keeps a chat-style history of questions and answers for the current session, supports uploading multiple documents at once, and uses a single flow: documents are ingested automatically when you select files (no separate Ingest button).
 
 ## Stack
 
@@ -74,6 +74,10 @@ These settings:
 - Are sent to the FastAPI backend on each ingest/query and override the config defaults.
 - Reset only when you change them or restart the browser tab (the session’s data still respects TTL and `/session` deletion).
 
+## Single-flow upload
+
+In the Streamlit UI, **ingest runs automatically** when you choose one or more files in the upload area. There is no separate “Ingest” button: once the file selection changes, the app sends the files to `POST /ingest/files` and shows chunk counts. The same selection is not re-ingested on later runs; change the selection or click “Start new session” to ingest again. This keeps the flow to: select files → (auto-ingest) → ask questions.
+
 ## Chat history
 
 In the Streamlit UI, a **“Previous Q&A”** section shows all questions and answers for the current browser session. Each entry displays the question, the answer, and expandable sources. History is kept in memory only (per tab) and is cleared when you click **“Start new session”**; it is not sent to or stored by the API.
@@ -108,8 +112,8 @@ In the Streamlit UI, a **“Previous Q&A”** section shows all questions and an
 - `app/session_db.py` — SQLite session tracking and TTL expiry
 - `vector_store/` — Chroma persistence (created on first use)
 - `data/` — Staged uploads (optional)
-- `streamlit_app.py` — Streamlit UI: session ID, multi-file upload, ingest, query, chat history, “Start new session”
-- `tests/` — Pytest: chunking, loaders, ingest, ingest batch, store, llm, query, session isolation, TTL cleanup, dedup, advanced options, chat history
+- `streamlit_app.py` — Streamlit UI: session ID, multi-file upload, auto-ingest (single flow), query, chat history, “Start new session”
+- `tests/` — Pytest: chunking, loaders, ingest, ingest batch, single-flow fingerprint, store, llm, query, session isolation, TTL cleanup, dedup, advanced options, chat history
 
 ## Tests
 
