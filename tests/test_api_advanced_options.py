@@ -54,3 +54,21 @@ def test_query_endpoint_passes_model():
     mock_rag.assert_called_once()
     _, kwargs = mock_rag.call_args
     assert kwargs["model"] == "gemma2"
+
+
+def test_delete_session_endpoint_returns_ok():
+    """DELETE /session (used by 'Start new session' confirmation) returns success."""
+    with patch("app.main.delete_session", return_value=0) as mock_delete, patch(
+        "app.main.remove_session"
+    ) as mock_remove:
+        resp = client.delete(
+            "/session",
+            headers={"X-Session-ID": "sess-to-clear"},
+        )
+    
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert "deleted_chunks" in data
+    mock_delete.assert_called_once_with("sess-to-clear")
+    mock_remove.assert_called_once_with("sess-to-clear")

@@ -35,6 +35,9 @@ if "last_ingested_fingerprint" not in st.session_state:
 if "last_ingested_result" not in st.session_state:
     st.session_state.last_ingested_result = None
 
+if "confirm_new_session" not in st.session_state:
+    st.session_state.confirm_new_session = False
+
 headers = {"X-Session-ID": st.session_state.session_id}
 
 st.set_page_config(page_title="RAG Chat", layout="centered")
@@ -130,17 +133,30 @@ with st.expander("Advanced options"):
     )
 
 # Session reset
-if st.button("Start new session"):
-    try:
-        with httpx.Client(timeout=20.0) as client:
-            client.delete(f"{API_BASE}/session", headers=headers)
-    except Exception:
-        pass
-    st.session_state.session_id = str(uuid.uuid4())
-    st.session_state.chat_history = []
-    st.session_state.last_ingested_fingerprint = None
-    st.session_state.last_ingested_result = None
-    st.rerun()
+if st.session_state.confirm_new_session:
+    st.warning("Are you sure? This will clear your documents and chat for this session.")
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        if st.button("Yes, start new session", type="primary"):
+            try:
+                with httpx.Client(timeout=20.0) as client:
+                    client.delete(f"{API_BASE}/session", headers=headers)
+            except Exception:
+                pass
+            st.session_state.session_id = str(uuid.uuid4())
+            st.session_state.chat_history = []
+            st.session_state.last_ingested_fingerprint = None
+            st.session_state.last_ingested_result = None
+            st.session_state.confirm_new_session = False
+            st.rerun()
+    with col2:
+        if st.button("Cancel"):
+            st.session_state.confirm_new_session = False
+            st.rerun()
+else:
+    if st.button("Start new session"):
+        st.session_state.confirm_new_session = True
+        st.rerun()
 
 headers = {"X-Session-ID": st.session_state.session_id}
 
