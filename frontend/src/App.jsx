@@ -21,7 +21,7 @@ export default function App() {
   const [chunkByWords, setChunkByWords] = useState(false)
   const [chunkSize, setChunkSize] = useState(512)
   const [chunkOverlap, setChunkOverlap] = useState(100)
-  const [topK, setTopK] = useState(4)
+  const [topK, setTopK] = useState(8)
   const [model, setModel] = useState('mistral')
   const [ingestInProgress, setIngestInProgress] = useState(false)
   const [lastIngestedResult, setLastIngestedResult] = useState(null)
@@ -58,13 +58,16 @@ export default function App() {
           ? `Ingested ${total} chunks from ${nFiles} file(s).`
           : ''
         lastIngestedSummaryRef.current = summary
-        setLastIngestedResult(
-          data?.ok
-            ? { summary }
-            : null
-        )
+        setLastIngestedResult(data?.ok ? { summary } : null)
         if (data?.ok && data?.files?.length) {
-          setUploadedFiles(data.files.map((f) => f.filename ?? f.name ?? 'File'))
+          setUploadedFiles((prev) => {
+            const existing = new Set(prev)
+            for (const f of data.files) {
+              const name = f.filename ?? f.name ?? 'File'
+              existing.add(name)
+            }
+            return Array.from(existing)
+          })
         }
         setStatusMessage(summary)
       } catch {
