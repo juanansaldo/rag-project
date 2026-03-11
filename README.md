@@ -1,6 +1,6 @@
 # RAG Project
 
-A retrieval-augmented generation (RAG) API: ingest documents, then ask questions and get answers grounded in stored content. Uses open-source models via Ollama (embeddings + LLM) and Chroma for the vector store. Data is isolated per session and expires after a configurable TTL. Advanced options let you tune chunking and retrieval per session. The Streamlit UI keeps a chat-style history of questions and answers for the current session, supports uploading multiple documents at once, and uses a single flow: when you select files, ingest runs **in the background** so you can type and submit a question immediately; if ingest is still running when you click Ask, the app waits for it to finish before running the query. Supported formats: PDF, TXT, MD, HTML, CSV, and DOCX.
+A retrieval-augmented generation (RAG) API: ingest documents, then ask questions and get answers grounded in stored content. Uses open-source models via Ollama (embeddings + LLM) and Chroma for the vector store. Data is isolated per session and expires after a configurable TTL. Advanced options let you tune chunking and retrieval per session. The React UI keeps a chat-style history of questions and answers for the current session, supports uploading multiple documents at once, and uses a single flow: when you select files, ingest runs **in the background** so you can type and submit a question immediately; if ingest is still running when you click Ask, the app waits for it to finish before running the query. Supported formats: PDF, TXT, MD, HTML, CSV, and DOCX.
 
 ## Stack
 
@@ -45,13 +45,13 @@ A retrieval-augmented generation (RAG) API: ingest documents, then ask questions
    - Health: http://127.0.0.1:8000/health
    - Docs: http://127.0.0.1:8000/docs
 
-5. (Optional) Start the Streamlit UI to upload docs and ask questions in the browser:
+5. Start the React frontend to upload docs and ask questions in the browser:
 
    ```bash
-   python -m streamlit run streamlit_app.py
+   cd frontend && npm install && npm run dev
    ```
 
-   Open http://localhost:8501. Keep the API running in another terminal.
+   Open http://localhost:5173. Keep the API running (step 4). The dev server proxies `/api` to the backend. For production, set `VITE_API_URL` to your API base URL and serve the built `frontend/dist` from your host.
 
 ## Session isolation & TTL
 
@@ -62,7 +62,7 @@ A retrieval-augmented generation (RAG) API: ingest documents, then ask questions
 
 ## Per-session advanced options
 
-In the Streamlit UI there is an **“Advanced options”** panel that controls behavior **per browser session**:
+The React UI has an **Options** panel (left sidebar) that controls behavior **per browser session**:
 
 - **Chunk by:** Toggle between **Characters** and **Words**.
   - **Characters (default):** Chunk by character count. Defaults: chunk size `CHUNK_SIZE` (e.g. 512), overlap `CHUNK_OVERLAP` (e.g. 100).
@@ -92,11 +92,11 @@ The API rejects other extensions with `Unsupported file type`. The UI file picke
 
 ## Single-flow upload and background ingest
 
-In the Streamlit UI, **ingest runs automatically in the background** when you choose one or more files in the upload area. There is no separate “Ingest” button and the UI does not block: once the file selection changes, the app starts ingest in a background thread and you can use the chat and question box right away. If you submit a question while ingest is still running, the app waits for ingest to complete (with a timeout) before running the RAG query. When ingest finishes, the upload area shows the chunk count and success message. The same selection is not re-ingested on later runs; change the selection or click “Start new session” to ingest again. Flow: select files → (background ingest) → ask questions anytime; query step waits for ingest when needed.
+In the React UI, **ingest runs automatically in the background** when you choose one or more files via the + button. There is no separate “Ingest” button: once you select files, the app starts ingest and you can use the query box right away. If you submit a question while ingest is still running, the app waits for ingest to complete before running the RAG query. When ingest finishes, uploaded documents appear as tabs above the query box. The same selection is not re-ingested; change the selection or click “Start new session” to ingest again. Flow: select files → (background ingest) → ask questions anytime; query step waits for ingest when needed.
 
 ## Chat history
 
-In the Streamlit UI, a **“Previous Q&A”** section shows all questions and answers for the current browser session. Each entry displays the question, the answer, and expandable sources. History is kept in memory only (per tab) and is cleared when you click **“Start new session”**; it is not sent to or stored by the API.
+The React UI shows all questions and answers for the current browser session. Each entry displays the question, the answer, and expandable sources. History is kept in memory only (per tab) and is cleared when you click **“Start new session”**; it is not sent to or stored by the API.
 
 ## API
 
@@ -106,7 +106,7 @@ In the Streamlit UI, a **“Previous Q&A”** section shows all questions and an
 
   Example in Postman: Body → form-data → key `file` (type: File) → select a file; add header `X-Session-ID: your-session-id`.
 
-- **POST /ingest/files** — Upload multiple documents in one request (same formats as above). Send as **form-data** with key `files` (multiple file parts). Include header **`X-Session-ID`**. Optional form fields: `chunk_size`, `chunk_overlap`, `chunk_by_words` (`"true"` or `"false"` for word-based chunking). Returns `{"ok": true, "total_chunks": n, "files": [{"filename": "...", "chunks_added": k}, ...]}`. The UI uses this for “Choose one or more files”.
+- **POST /ingest/files** — Upload multiple documents in one request (same formats as above). Send as **form-data** with key `files` (multiple file parts). Include header **`X-Session-ID`**. Optional form fields: `chunk_size`, `chunk_overlap`, `chunk_by_words` (`"true"` or `"false"` for word-based chunking). Returns `{"ok": true, "total_chunks": n, "files": [{"filename": "...", "chunks_added": k}, ...]}`. The React UI uses this for multi-file upload.
 
 - **POST /query** — Ask a question. Body: JSON `{"question": "...", "top_k": optional int, "model": optional str}`. `model` is the Ollama model name (e.g. mistral, llama3.2). Include header **`X-Session-ID`**. Returns `{"answer": "...", "sources": [...]}` (each source has `document` snippet and `metadata`).
 
@@ -128,7 +128,7 @@ In the Streamlit UI, a **“Previous Q&A”** section shows all questions and an
 - `app/session_db.py` — SQLite session tracking and TTL expiry
 - `vector_store/` — Chroma persistence (created on first use)
 - `data/` — Staged uploads (optional)
-- `streamlit_app.py` — Streamlit UI: session ID, advanced options (chunk by characters/words, chunk size/overlap, top K, LLM model), multi-file upload, background auto-ingest (single flow), query (waits for ingest when needed), chat history, “Start new session”
+- `frontend/` — React (Vite) UI: session, Options sidebar (chunk by characters/words, chunk size/overlap, top K, LLM model), upload (+ button), background ingest, query, chat history, "Start new session". Run `npm run dev` in `frontend/` and open http://localhost:5173
 - `tests/` — Pytest: chunking (character + word mode), loaders, ingest, ingest batch, single-flow fingerprint, store, llm (including model override), query, session isolation, TTL cleanup, dedup, advanced options, chat history
 
 ## Tests
